@@ -2,41 +2,17 @@
  * @copyright yunnysunny <yunnysunny@gmail.com>
  * @license MIT 
  * 
- * 最近新网的DNS被黑，导致很多网站的域名被泛解析，我的网站whyun.com也不幸中招。
- * 在搜索引擎中搜site:whyun.com，会出现大量的垃圾网站，都是博彩网站的网页。
- * 但是这些垃圾网页的链接已经全部失效了。
- * 给百度提交反馈，得到的回复总是：
- * `本分类仅受理来自网页搜索的用户反馈(包括快照的更新、删除等)，原网站未删除的请先联系原网站删除`。
- * 着实令人恼火，每次提交反馈得到的反馈都是一样的，明显是敷衍。所以才有了提交死链的想法。
+ * 真是不幸，自己的网站又中木马了，网站空间出现了一个木马文件夹，里面充斥着各种垃圾网页，
+ * 而且短短时间内这些垃圾网页就被google收录了。这些做木马的人技术还真是强悍，我自己做的网页
+ * 八辈子收录不了，他这木马网页短短两个星期的样子就被大面积收录。
  * 
+ * 和之前处理百度死链的脚本工具的使用模式是一样的：
+ * `phantomjs 脚本文件路径 搜索条件 要处理的分页数`
+ * 然后会生成一个`error_links_google.txt`,里面存储的是访问网页过程中无法访问资源的链接，当然无法访问
+ * 并不大表他就是木马网页，有可能是你正常的资源但是由于某种原因无法访问了。所以你还得手工筛选一下。
  * 
- * 说到提交死链，在google的站长工具中也是可以，具体位置在
- * https://www.google.com/webmasters/tools/removals?hl=zh-cn，遗憾的是google没有提供批量添加死链的功能。
- * 不过提交给google处理的死链一般一天的时间就能处理完。同样在百度站长平台中，具体位置在
- * 百度站长平台->数据提交->死链提交，打开界面后需要提交一个死链文件的链接地址。但是这个死链文件
- * 格式必须是xml格式的，具体格式如下：
- * 	<?xml version="1.0" encoding="UTF-8"?>
-	<urlset>
-		<url>
-			<loc>死链地址1</loc>
-		</url>
-		<url>
-			<loc>死链地址2</loc>
-		</url>
-	<urlset>
-	如果手动编辑这个文件太费劲，所以才有了这个工具。
-	
-	首先这个工具是使用phantomjs脚本编写的，所以必须先去其官网下载http://phantomjs.org/download.html
-	下载完之后，解压到一个任意目录，然后把这个目录追加到系统的`PATH`变量中，保证在命令行中输入phantomjs
-	能够访问这个命令。然后运行
-	
-	`phantomjs 脚本文件路径 搜索条件 要处理的分页数`
-	
-	`脚本文件路径`肯定就是指当前脚本文件的存放目录，`搜索条件`是提交到百度的搜索条件，
-	比如要查看我的网站whyun.com的所有收录，则可以输入	`site:whyun.com`，
-	`要处理的分页数`是由于百度出来的搜索结果是分页的，这里告诉程序处理多少个分页。
-	
-	最终结果会生成到error_links.xml中。
+ * 得到这个`error_links_google.txt`之后就可以去https://www.google.com/webmasters/tools/removals?hl=zh-cn
+ * 提交你的死链请求了。
  * 
  */
 var fs = require('fs');
@@ -45,8 +21,8 @@ var system = require('system');
 
 
 var keyword = 'site:whyun.com';
-var searchUrl = 'http://www.baidu.com/s?ie=utf-8&wd=';
-var pageCount = 1;
+var searchUrl = 'https://www.google.com.hk/search?ie=UTF-8&q=';
+var pageCount = 7;
 if (system.args.length == 3) {
 	keyword = system.args[1];	
 	pageCount = parseInt(system.args[2]);
@@ -61,15 +37,12 @@ var totalLinks = [];
 var linkLen = 0;
 var hasNavigatedCount = 0;
 
-var errorStream = fs.open("error_links.xml","w");
-var okStream = fs.open('ok_links.txt','w');
-
-errorStream.writeLine('<?xml version="1.0" encoding="UTF-8"?>');
-errorStream.writeLine('<urlset>');
+var errorStream = fs.open("error_links_google.txt","w");
+var okStream = fs.open('ok_links_google.txt','w');
 
 for (var i=0;i<num;i++) {
 	var pageOffset = i*10;
-	var pageUrl = searchUrl + '&pn=' + pageOffset;
+	var pageUrl = searchUrl + '&start=' + pageOffset;
 	
 	searchTimer(pageUrl,i);
 }
@@ -122,13 +95,13 @@ function searchOnePage(pageUrl,index) {
 				var urls = [];
 
 				try {
-					var ts = document.getElementsByClassName('t');
+					var ts = document.getElementsByTagName('cite');
 					console.log("link area length:"+ts.length);
 					for(var i=0,len=ts.length;i<len;i++) {
 						var t = ts[i];
 						if (t) {
-							var a = t.getElementsByTagName('a')[0];
-							var href = a.getAttribute('href');
+							
+							var href = t.innerHTML;
 							urls.push(href);
 						} else {
 							console.log('invalid html');
@@ -167,25 +140,28 @@ function navigateToUrl(url,index) {
 	    navigatedUrl = url;
 	}
 
+	
+	page.onResourceError = function(resourceError) {
+	    var reason = resourceError.errorString;
+	    var reason_url = resourceError.url;
+	    console.warn('nagigate to url ' + reason_url + ' ' + reason);	    	
+    	
+//    	console.warn('Unable to access network:'+url);
+        try {
+        	errorStream.writeLine(reason_url);
+        	errorStream.flush();
+        } catch (e) {
+        	console.error('an error occured when save wrong url',e);
+        }
+	};
+
+
+
 	page.open(url,function(status) {
 		hasNavigatedCount++;
-		if (status !== 'success') {
-	        console.warn('Unable to access network:'+url);
-	        try {
-	        	errorStream.writeLine('\t<url>');
-	        	errorStream.writeLine('\t\t<loc>'+navigatedUrl+'</loc>');
-	        	errorStream.writeLine('\t</url>');
-	        	errorStream.flush();
-	        } catch (e) {
-	        	console.error('an error occured when save wrong url',e);
-	        }
-	        
-	    } else {
-	    	okStream.writeLine(navigatedUrl);
-	    }
+		
 		console.log('has navigated ' + hasNavigatedCount + 'th pages.');
 		if (hasNavigatedCount == linkLen) {
-			errorStream.writeLine('</urlset>');
 			errorStream.close();
 			okStream.close();
         	phantom.exit();
