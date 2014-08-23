@@ -46,7 +46,7 @@ var system = require('system');
 
 var keyword = 'site:whyun.com';
 var searchUrl = 'http://www.baidu.com/s?ie=utf-8&wd=';
-var pageCount = 1;
+var pageCount = 7;
 if (system.args.length == 3) {
 	keyword = system.args[1];	
 	pageCount = parseInt(system.args[2]);
@@ -161,28 +161,26 @@ function searchOnePage(pageUrl,index) {
 function navigateToUrl(url,index) {
 	url = 'http:' + url;
 	var page = webpage.create();
-	var navigatedUrl = '';
-	page.onNavigationRequested = function(url, type, willNavigate, main) {
-	    console.log('Trying to navigate to: ' + url);
-	    navigatedUrl = url;
-	}
+	
+	page.onResourceError = function(resourceError) {
+	    var reason = resourceError.errorString;
+	    var reason_url = resourceError.url;
+	    console.warn('nagigate to url ' + reason_url + ' ' + reason);	    	
+	    
+        try {
+        	errorStream.writeLine('\t<url>');
+        	errorStream.writeLine('\t\t<loc>'+reason_url+'</loc>');
+        	errorStream.writeLine('\t</url>');
+        	errorStream.flush();
+        } catch (e) {
+        	console.error('an error occured when save wrong url',e);
+        }
+        
+	};
 
 	page.open(url,function(status) {
 		hasNavigatedCount++;
-		if (status !== 'success') {
-	        console.warn('Unable to access network:'+url);
-	        try {
-	        	errorStream.writeLine('\t<url>');
-	        	errorStream.writeLine('\t\t<loc>'+navigatedUrl+'</loc>');
-	        	errorStream.writeLine('\t</url>');
-	        	errorStream.flush();
-	        } catch (e) {
-	        	console.error('an error occured when save wrong url',e);
-	        }
-	        
-	    } else {
-	    	okStream.writeLine(navigatedUrl);
-	    }
+
 		console.log('has navigated ' + hasNavigatedCount + 'th pages.');
 		if (hasNavigatedCount == linkLen) {
 			errorStream.writeLine('</urlset>');
