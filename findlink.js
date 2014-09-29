@@ -159,8 +159,12 @@ function searchOnePage(pageUrl,index) {
 }
 
 function navigateToUrl(url,index) {
-	url = 'http:' + url;
+	//url = 'http:' + url;
 	var page = webpage.create();
+	
+	page.onUrlChanged = function(targetUrl) {
+		console.log('=====New real URL: ' + targetUrl);
+	};
 	
 	page.onResourceError = function(resourceError) {
 	    var reason = resourceError.errorString;
